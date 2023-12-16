@@ -219,6 +219,16 @@ class HTTPServer:
                 break
         return has_cookie, cookie
 
+    def add_cookie(self, username, builder):
+        old_cookie = self.cookie[username][0]
+        expire = self.cookie[username][1]
+        if time.time() - expire < 3600:
+            cookie = old_cookie
+        else:
+            cookie = self.generate_cookie()
+            store_cookie(cookie, username)
+        builder.add_header("Set-Cookie", f"session-id={cookie}")
+
     def process_response(self, request):
         formatted_data = request.strip().split(CRLF)
         request_words = formatted_data[0].split()
@@ -257,9 +267,7 @@ class HTTPServer:
             else:
                 builder.add_header("Connection", "Close")
             builder.add_header("Content-Type", get_file_mime_type(requested_file.split(".")[1]))
-            cookie = self.generate_cookie()
-            builder.add_header("Set-Cookie", f"session-id={cookie}")
-            store_cookie(cookie, username)
+            self.add_cookie(username,builder)
             return builder.build(), keep
         return response, keep
 
@@ -283,9 +291,7 @@ class HTTPServer:
             else:
                 builder.add_header("Connection", "Close")
             builder.add_header("Content-Type", get_file_mime_type(requested_file.split(".")[1]))
-            cookie = self.generate_cookie()
-            builder.add_header("Set-Cookie", f"session-id={cookie}")
-            store_cookie(cookie, username)
+            self.add_cookie(username,builder)
             return builder.build(), keep
 
         # """
@@ -314,9 +320,7 @@ class HTTPServer:
             builder.add_header("Connection", "Close")
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("post.html"))
-        cookie = self.generate_cookie()
-        builder.add_header("Set-Cookie", f"session-id={cookie}")
-        store_cookie(cookie, username)
+        self.add_cookie(username, builder)
         return builder.build(), keep
 
         # """
@@ -384,9 +388,7 @@ class HTTPServer:
             builder.add_header("Connection", "Keep-Alive")
         else:
             builder.add_header("Connection", "Close")
-        cookie = self.generate_cookie()
-        builder.add_header("Set-Cookie", f"session-id={cookie}")
-        store_cookie(cookie, username)
+        self.add_cookie(username,builder)
         return builder.build(), keep
 
     # TODO: Make a function that handles not found error
@@ -403,9 +405,7 @@ class HTTPServer:
             builder.add_header("Connection", "Close")
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("404.html"))
-        cookie = self.generate_cookie()
-        builder.add_header("Set-Cookie", f"session-id={cookie}")
-        store_cookie(cookie, username)
+        self.add_cookie(username,builder)
         return builder.build(), keep
 
     # TODO: Make a function that handles forbidden error
@@ -422,9 +422,7 @@ class HTTPServer:
             builder.add_header("Connection", "Close")
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("403.html"))
-        cookie = self.generate_cookie()
-        builder.add_header("Set-Cookie", f"session-id={cookie}")
-        store_cookie(cookie, username)
+        self.add_cookie(username, builder)
         return builder.build(), keep
 
 
