@@ -220,13 +220,13 @@ class HTTPServer:
         return has_cookie, cookie
 
     def add_cookie(self, username, builder):
-        old_cookie = self.cookie[username][0]
-        expire = self.cookie[username][1]
-        if time.time() - expire < 3600:
-            cookie = old_cookie
-        else:
-            cookie = self.generate_cookie()
-            store_cookie(cookie, username)
+        cookie = self.generate_cookie()
+        if self.cookie.get(username) is not None:
+            old_cookie = self.cookie[username][0]
+            expire = self.cookie[username][1]
+            if time.time() - expire < 3600:
+                cookie = old_cookie
+        store_cookie(cookie, username)
         builder.add_header("Set-Cookie", f"session-id={cookie}")
 
     def process_response(self, request):
@@ -267,7 +267,7 @@ class HTTPServer:
             else:
                 builder.add_header("Connection", "Close")
             builder.add_header("Content-Type", get_file_mime_type(requested_file.split(".")[1]))
-            self.add_cookie(username,builder)
+            self.add_cookie(username, builder)
             return builder.build(), keep
         return response, keep
 
@@ -291,7 +291,7 @@ class HTTPServer:
             else:
                 builder.add_header("Connection", "Close")
             builder.add_header("Content-Type", get_file_mime_type(requested_file.split(".")[1]))
-            self.add_cookie(username,builder)
+            self.add_cookie(username, builder)
             return builder.build(), keep
 
         # """
@@ -388,7 +388,7 @@ class HTTPServer:
             builder.add_header("Connection", "Keep-Alive")
         else:
             builder.add_header("Connection", "Close")
-        self.add_cookie(username,builder)
+        self.add_cookie(username, builder)
         return builder.build(), keep
 
     # TODO: Make a function that handles not found error
@@ -405,7 +405,7 @@ class HTTPServer:
             builder.add_header("Connection", "Close")
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("404.html"))
-        self.add_cookie(username,builder)
+        self.add_cookie(username, builder)
         return builder.build(), keep
 
     # TODO: Make a function that handles forbidden error
