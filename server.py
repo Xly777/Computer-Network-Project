@@ -7,6 +7,7 @@ import os
 import stat
 import threading
 import time
+import mimetypes
 
 from threading import Thread
 
@@ -73,7 +74,20 @@ mime_types = {
     "mp3": "audio/mpeg",
     "png": "image/png",
     "jpg": "image/jpg",
-    "jpeg": "image/jpeg"
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "pdf": "application/pdf",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xls": "application/vnd.ms-excel",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "ppt": "application/vnd.ms-powerpoint",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "zip": "application/zip",
+    "txt": "text/plain",
+    "json": "application/json",
+    "xml": "application/xml",
+    # 添加其他需要的类型
 }
 
 
@@ -102,7 +116,7 @@ class HTTPServer:
     Our actual HTTP server which will service GET and POST requests.
     """
 
-    def __init__(self, host="localhost", port=9001, directory="./testdemo"):
+    def __init__(self, host="localhost", port=8080, directory="./data"):
         self.auth: dict = {}
         self.cookie: dict = {}
         print(f"Server started. Listening at http://{host}:{port}/")
@@ -121,8 +135,12 @@ class HTTPServer:
         self.sock.listen(128)
 
     def load_cookie(self):
-        with open('cookie.json', 'r') as f:
-            self.cookie = json.load(f)
+        try:
+            with open('cookie.json', 'r') as f:
+                # 尝试加载 JSON 数据
+                self.cookie = json.load(f)
+        except json.decoder.JSONDecodeError:
+            self.cookie: dict = {}
 
     def load_auth(self):
         with open('auth.json', 'r') as f:
@@ -169,8 +187,9 @@ class HTTPServer:
     def check_has_auth(self, data: list[str]):
         has_auth = False
         for line in data:
-            if line.split()[0] == 'Authorization:':
-                has_auth = True
+            if line.strip():
+                if line.split()[0] == 'Authorization:':
+                    has_auth = True
         return has_auth
 
     def check_auth(self, data: list[str], cookie: str):
@@ -213,10 +232,11 @@ class HTTPServer:
         has_cookie = False
         cookie = ''
         for line in data:
-            if line.split()[0].lower() == 'cookie:':
-                has_cookie = True
-                cookie = line.split('=')[-1]
-                break
+            if line.strip():
+                if line.split()[0].lower() == 'cookie:':
+                    has_cookie = True
+                    cookie = line.split('=')[-1]
+                    break
         return has_cookie, cookie
 
     def add_cookie(self, username, builder):
@@ -232,9 +252,16 @@ class HTTPServer:
     def process_response(self, request):
         formatted_data = request.strip().split(CRLF)
         request_words = formatted_data[0].split()
+        print(formatted_data)
+        print(request_words)
+        if request_words[0] == "OPTIONS":
+            builder = ResponseBuilder()
+            builder.set_status("200", "OK")
+            builder.set_content("")
+            return builder.build(), True
         if len(request_words) == 0:
             return
-        requested_file = request_words[1][1:]
+        PathAndParams = request_words[1]
         has_auth = self.check_has_auth(formatted_data)
         has_cookie, cookie = self.check_has_cookie(formatted_data)
         if not has_auth and not has_cookie:
@@ -243,54 +270,227 @@ class HTTPServer:
             true_auth, username = self.check_auth(formatted_data, cookie)
         if not true_auth:
             return self.unauthorized(formatted_data)
+
+        ## if no auth's folder, create one
+        if not os.path.exists(self.working_dir + "/" + username):
+            os.mkdir(self.working_dir + "/" + username)
         if request_words[0] == "GET":
-            return self.get_request(requested_file, formatted_data, username)
+            if "upload" in PathAndParams or "delete" in PathAndParams:
+                return self.method_not_allowed(formatted_data, username)
+            requested_file = ''
+            number = -2
+            tempParams = ''
+            if "?" in PathAndParams:
+                parts = PathAndParams.split("?")
+                tempFile = parts[0]
+                tempFile = tempFile.rstrip('/')
+                requested_file = self.working_dir + tempFile
+                print(requested_file)
+                if not os.path.exists(requested_file):
+                    return self.resource_not_found(formatted_data, username)
+                if os.path.isdir(requested_file):
+                    parts1 = requested_file.split("/")
+                    authority = parts1[2] if len(parts1) >= 3 else -1
+                    if authority in self.auth and authority != -1:
+                        if authority != username:
+                            return self.resource_forbidden(formatted_data, username)
+                    tempParams = parts[1]
+                    number = tempParams[-1]
+                    if tempParams != "SUSTech-HTTP=0" and tempParams != "SUSTech-HTTP=1":
+                        return self.bad_request(formatted_data, username)
+                else:
+                    parts1 = requested_file.split("/")
+                    authority = parts1[2] if len(parts1) > 3 else -1
+                    if authority in self.auth and authority != -1:
+                        if authority != username:
+                            return self.resource_forbidden(formatted_data, username)
+                    tempParams = parts[1]
+                    number = 3
+                    if tempParams != "chunked=1":
+                        return self.bad_request(formatted_data, username)
+            else:
+                tempFile = PathAndParams
+                tempFile = tempFile.rstrip('/')
+                requested_file = self.working_dir + tempFile
+                print(requested_file)
+                if not os.path.exists(requested_file):
+                    return self.resource_not_found(formatted_data, username)
+                if os.path.isdir(requested_file):
+                    parts = requested_file.split("/")
+                    authority = parts[2] if len(parts) >= 3 else -1
+                    if authority in self.auth and authority != -1:
+                        if authority != username:
+                            return self.resource_forbidden(formatted_data, username)
+                    number = 0
+                else:
+                    parts = requested_file.split("/")
+                    authority = parts[2] if len(parts) > 3 else -1
+                    if authority in self.auth and authority != -1:
+                        if authority != username:
+                            return self.resource_forbidden(formatted_data, username)
+                    number = 2
+            return self.get_request(requested_file, number, formatted_data, username)
+
         if request_words[0] == "POST":
-            return self.post_request(requested_file, formatted_data, username)
+            if "upload" not in PathAndParams and "delete" not in PathAndParams:
+                return self.method_not_allowed(formatted_data, username)
+            if "path" not in PathAndParams:
+                return self.bad_request(formatted_data, username)
+            if "?" in PathAndParams:
+                method = PathAndParams.split("?")[0]
+                params = PathAndParams.split("?")[1]
+                print(method)
+                params = params.split("=")[1]
+                params = params.replace("%2F", "/")
+                params = params.strip("/")
+                requested_file = "./data/" + params
+                print(requested_file)
+                parts = requested_file.split("/")
+                authority = parts[2]
+                if authority != username:
+                    return self.resource_forbidden(formatted_data, username)
+                elif not os.path.exists(requested_file):
+                    return self.resource_not_found(formatted_data,username)
+                elif "upload" in method:
+                    return self.post_request(1, requested_file, formatted_data, username)
+                elif "delete" in method:
+                    return self.post_request(2, requested_file, formatted_data, username)
+            else:
+                return self.bad_request(formatted_data, username)
         if request_words[0] == "HEAD":
-            return self.head_request(requested_file, formatted_data, username)
-        return self.method_not_allowed(formatted_data)
+            if "upload" in PathAndParams or "delete" in PathAndParams:
+                return self.method_not_allowed(formatted_data, username)
+            requested_file = ''
+            number = -2
+            tempParams = ''
+            if "?" in PathAndParams:
+                parts = PathAndParams.split("?")
+                tempFile = parts[0]
+                tempFile = tempFile.rstrip('/')
+                requested_file = self.working_dir + tempFile
+                print(requested_file)
+                if not os.path.exists(requested_file):
+                    return self.resource_not_found(formatted_data, username)
+                if os.path.isdir(requested_file):
+                    parts1 = requested_file.split("/")
+                    authority = parts1[2] if len(parts1) >= 3 else -1
+                    if authority in self.auth and authority != -1:
+                        if authority != username:
+                            return self.resource_forbidden(formatted_data, username)
+                    tempParams = parts[1]
+                    number = tempParams[-1]
+                    if tempParams != "SUSTech-HTTP=0" and tempParams != "SUSTech-HTTP=1":
+                        return self.bad_request(formatted_data, username)
+                else:
+                    parts1 = requested_file.split("/")
+                    authority = parts1[2] if len(parts1) > 3 else -1
+                    if authority in self.auth and authority != -1:
+                        if authority != username:
+                            return self.resource_forbidden(formatted_data, username)
+                    tempParams = parts[1]
+                    number = 3
+                    if tempParams != "chunked=1":
+                        return self.bad_request(formatted_data, username)
+            else:
+                tempFile = PathAndParams
+                tempFile = tempFile.rstrip('/')
+                requested_file = self.working_dir + tempFile
+                print(requested_file)
+                if not os.path.exists(requested_file):
+                    return self.resource_not_found(formatted_data, username)
+                if os.path.isdir(requested_file):
+                    parts = requested_file.split("/")
+                    authority = parts[2] if len(parts) >= 3 else -1
+                    if authority in self.auth and authority != -1:
+                        if authority != username:
+                            return self.resource_forbidden(formatted_data, username)
+                    number = 0
+                else:
+                    parts = requested_file.split("/")
+                    authority = parts[2] if len(parts) > 3 else -1
+                    if authority in self.auth and authority != -1:
+                        if authority != username:
+                            return self.resource_forbidden(formatted_data, username)
+                    number = 2
+            return self.head_request(requested_file, number, formatted_data, username)
+        return self.method_not_allowed(formatted_data,username)
 
     # The response to a HEADER request
-    def head_request(self, requested_file, data, username):
+    def head_request(self, requested_file, number, data: list[str], username):
         keep = self.check_keep(data)
-        if not os.path.exists(requested_file):
-            response, temp = self.resource_not_found(data, username)
-        elif not has_permission_other(requested_file):
-            response, temp = self.resource_forbidden(data, username)
-        else:
-            builder = ResponseBuilder()
-            builder.set_content("")
-            builder.set_status("200", "OK")
-            if keep:
-                builder.add_header("Connection", "Keep-Alive")
-            else:
-                builder.add_header("Connection", "Close")
-            builder.add_header("Content-Type", get_file_mime_type(requested_file.split(".")[1]))
-            self.add_cookie(username, builder)
-            return builder.build(), keep
-        return response, keep
-
-    # TODO: Write the response to a GET request
-    def get_request(self, requested_file, data: list[str], username):
-        keep = self.check_keep(data)
-        if not os.path.exists(requested_file):
-            return self.resource_not_found(data, username)
-        elif not has_permission_other(requested_file):
+        if not has_permission_other(requested_file):
             return self.resource_forbidden(data, username)
         else:
             builder = ResponseBuilder()
-            builder.set_content("")
-            if should_return_binary(requested_file.split(".")[1]):
-                builder.set_content(get_file_binary_contents(requested_file))
-            else:
-                builder.set_content(get_file_contents(requested_file))
+            if int(number) == 1 and os.path.isdir(requested_file):
+                builder.set_content("")
+                builder.add_header("Content-Type", "application/json")
+            elif int(number) == 2:
+                # Case: Return file binary content
+                file_content = get_file_binary_contents(requested_file)
+                builder.set_content("")
+                media_type, encoding = mimetypes.guess_type(requested_file)
+                builder.add_header("Content-Type", media_type)
+                builder.add_header("Content-Length", str(len(file_content)))
+            elif int(number) == 0:
+                builder.set_content("")
+                builder.add_header("Content-Type", "text/html")
+            elif int(number) == 3:
+                media_type, encoding = mimetypes.guess_type(requested_file)
+                builder.add_header("Content-Type", media_type)
+                builder.add_header("Transfer-Encoding", "chunked")
             builder.set_status("200", "OK")
             if keep:
                 builder.add_header("Connection", "Keep-Alive")
             else:
                 builder.add_header("Connection", "Close")
-            builder.add_header("Content-Type", get_file_mime_type(requested_file.split(".")[1]))
+            self.add_cookie(username, builder)
+            return builder.build(), keep
+
+
+    # TODO: Write the response to a GET request
+    def get_request(self, requested_file, number, data: list[str], username):
+        print(number)
+        print(requested_file)
+        keep = self.check_keep(data)
+        if not has_permission_other(requested_file):
+            return self.resource_forbidden(data, username)
+        else:
+            builder = ResponseBuilder()
+            # if should_return_binary(requested_file.split(".")[1]):
+            #     builder.set_content(get_file_binary_contents(requested_file))
+            # else:
+            #     builder.set_content(get_file_contents(requested_file))
+            if int(number) == 1 and os.path.isdir(requested_file):
+                # Case: Return directory content as JSON
+                content = self.get_directory_content(requested_file)
+                builder.set_content(content)
+                builder.add_header("Content-Type", "application/json")
+            elif int(number) == 2:
+                # Case: Return file binary content
+                file_content = get_file_binary_contents(requested_file)
+                builder.set_content(file_content)
+                media_type, encoding = mimetypes.guess_type(requested_file)
+                builder.add_header("Content-Type", media_type)
+                builder.add_header("Content-Length", str(len(file_content)))
+            elif int(number) == 0:
+                # Case: Show HTML page for directory or file
+                builder.set_content(self.get_directory_html(requested_file, username))
+                builder.add_header("Content-Type", "text/html")
+            elif int(number) == 3:
+                # Case: Chunked transfer
+                file_content = get_file_binary_contents(requested_file)
+                builder.set_content(file_content)
+                media_type, encoding = mimetypes.guess_type(requested_file)
+                builder.add_header("Content-Type", media_type)
+                builder.add_header("Transfer-Encoding", "chunked")
+
+
+            builder.set_status("200", "OK")
+            if keep:
+                builder.add_header("Connection", "Keep-Alive")
+            else:
+                builder.add_header("Connection", "Close")
             self.add_cookie(username, builder)
             return builder.build(), keep
 
@@ -309,10 +509,94 @@ class HTTPServer:
         # depending on `get_file_mime_type`.
         # """
 
+    def get_directory_content(self, directory):
+        content = []
+        for item in os.listdir(directory):
+            item_path = os.path.join(directory, item)
+            if os.path.isdir(item_path):
+                content.append(item + "/")
+            else:
+                content.append(item)
+        return json.dumps(content)
+
+    def get_directory_html(self, directory, username):
+        password = self.auth[username]
+        temp = username + ":" + password
+        encoded_bytes = temp.encode("utf-8")
+        Authorization = base64.b64encode(encoded_bytes).decode("utf-8")
+
+        content = ("<html><head><meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">" +
+                   "<title>Directory listing for" + directory + "</title></head><body>")
+        content += ("<h1>Directory listing for" + directory + "</h1><hr><ul>")
+        result = directory.split("/", 2)[2] if directory.count("/") > 1 else ""
+
+        # Add link for the parent directory
+        if directory.count("/") > 1:
+            parent_directory = '/'.join(directory.split("/")[:-1])
+            if parent_directory == self.working_dir:
+                request_parent = f'http://localhost:9001/'
+            else:
+                request_parent = f'http://localhost:9001/{"/".join(result.split("/")[:-1])}/'
+            content += f"""
+                         <li><a href="#" onclick="sendGetRequest('{request_parent}')">./</a></li>
+                        """
+
+        request_root = f'http://localhost:9001/'
+        content += f"""
+                        <li><a href="#" onclick="sendGetRequest('{request_root}')">../</a></li>
+                    """
+        for item in os.listdir(directory):
+            temp = directory + "/" + f"{item}"
+            if os.path.isdir(temp):
+                request = f'http://localhost:9001/{result}/{item}'
+                content += f"""
+                                            <li><a href="#" onclick="sendGetRequest('{request}')">{item}/</a></li>
+                                            """
+            else:
+                request = f'http://localhost:9001/{result}/{item}'
+                content += f"""
+                                            <li><a href="#" onclick="sendGetRequest('{request}')">{item}</a></li>
+                                            """
+        content += "</ul><hr><script>"
+        content += '''
+                    function sendGetRequest(request) {
+                        var xhr = new XMLHttpRequest();
+                        xhr.open("GET", request, true);
+                    '''
+
+        content += f'''
+                        xhr.setRequestHeader("Authorization", "Basic {Authorization}");
+                    '''
+        content += '''
+                        xhr.setRequestHeader("Connection", "Keep-Alive");
+                        xhr.onreadystatechange = function () {
+                            if (xhr.readyState === 4 && xhr.status === 200) {
+                                console.log(xhr.responseText);
+                            }
+                        };
+                        xhr.send();
+                    }
+                    '''
+        content += "</script></body></html>"
+        return content
+
     # TODO: Write the response to a POST request
-    def post_request(self, requested_file, data, username):
+    def post_request(self, number, requested_file, data, username):
+        print(number)
+        print(requested_file)
+        print(data)
         keep = self.check_keep(data)
         builder = ResponseBuilder()
+        # if int(number) == 1:
+        #     if not os.path.isdir(requested_file):
+        #         return self.bad_request(data,username)
+        #     for line in data:
+        #         if line.strip():
+        #             if line.split()[0] == "filename"
+        if int(number) == 2:
+            if os.path.isdir(requested_file):
+                return self.bad_request(data,username)
+            os.remove(requested_file)
         builder.set_status("200", "OK")
         if keep:
             builder.add_header("Connection", "Keep-Alive")
@@ -384,6 +668,7 @@ class HTTPServer:
         builder.set_status("405", "METHOD NOT ALLOWED")
         allowed = ", ".join(["GET", "POST"])
         builder.add_header("Allow", allowed)
+        builder.set_content("")
         if keep:
             builder.add_header("Connection", "Keep-Alive")
         else:
@@ -425,6 +710,22 @@ class HTTPServer:
         self.add_cookie(username, builder)
         return builder.build(), keep
 
+    def bad_request(self, data, username):
+        keep = self.check_keep(data)
+        """
+        Returns 400 Bad Request status and sends back our 400.html page.
+        """
+        builder = ResponseBuilder()
+        builder.set_status("400", "Bad Request")
+        if keep:
+            builder.add_header("Connection", "Keep-Alive")
+        else:
+            builder.add_header("Connection", "Close")
+        builder.add_header("Content-Type", mime_types["html"])
+        builder.set_content(get_file_contents("400.html"))
+        self.add_cookie(username, builder)
+        return builder.build(), keep
+
 
 class ResponseBuilder:
     """
@@ -448,6 +749,12 @@ class ResponseBuilder:
         """ Adds a new header to the response """
         self.headers.append(f"{headerKey}: {headerValue}")
 
+    def add_cors_headers(self):
+        """添加CORS头到响应中"""
+        self.add_header("Access-Control-Allow-Origin", "*")  # 允许来自任何来源的请求
+        self.add_header("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS")  # 允许特定的HTTP方法
+        self.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization")  # 允许特定的头部
+
     def set_status(self, statusCode, statusMessage):
         """ Sets the status of the response """
         self.status = f"HTTP/1.1 {statusCode} {statusMessage}"
@@ -461,16 +768,31 @@ class ResponseBuilder:
 
     # TODO Complete the build function
     def build(self):
-
         response = self.status
         response += CRLF
+        self.add_cors_headers()
         for i in self.headers:
             response += i
             response += CRLF
         response += CRLF
-        response = response.encode("utf-8")
-        response += self.content
 
+        if self.content != "":
+            # Check if chunked transfer encoding is used
+            if "Transfer-Encoding: chunked" in self.headers:
+                response = response.encode("utf-8")
+                chunk_size = 2  # You can adjust the chunk size as needed
+                chunks = [self.content[i:i + chunk_size] for i in range(0, len(self.content), chunk_size)]
+                for chunk in chunks:
+                    chunk_size_hex = hex(len(chunk))[2:]  # Convert to hexadecimal
+                    response += chunk_size_hex.encode("utf-8") + CRLF.encode("utf-8")
+                    response += chunk + CRLF.encode("utf-8")
+
+                # Add the last chunk with size 0 to indicate the end
+                response += b"0" + CRLF.encode("utf-8") + CRLF.encode("utf-8")
+            else:
+                # If not using chunked transfer encoding, add the entire content
+                response = response.encode("utf-8")
+                response += self.content
         return response
         # """
         # Returns the utf-8 bytes of the response.
