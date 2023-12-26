@@ -1,0 +1,50 @@
+GET http://localhost:8080/a.txt/?SUSTech-HTTP=1
+Authorization: Basic cm9vdDpyb290
+Connection: Keep-Alive
+
+
+###
+GET http://localhost:8080/root/a.txt
+Authorization: Basic cm9vdDpyb290
+Connection: Keep-Alive
+
+###
+GET http://localhost:8080/root/?SUSTech-HTTP=0
+Authorization: Basic cm9vdDpyb290
+Connection: Keep-Alive
+
+###
+GET http://localhost:8080/root/test/
+Authorization: Basic cm9vdDpyb290
+Connection: Keep-Alive
+
+###
+GET http://localhost:8080/root223213
+Authorization: Basic cm9vdDpyb290
+Connection: Keep-Alive
+
+###
+GET http://localhost:8080/root/?SUSTech-HTTP=1
+Authorization: Basic cm9vdDpyb290
+Connection: Keep-Alive
+
+###
+GET http://localhost:8080
+Authorization: Basic cm9vdDpyb290
+Connection: Keep-Alive
+
+###
+GET http://localhost:8080/root/test/
+Authorization: Basic Y2xpZW50MToxMjM=
+Connection: Keep-Alive
+
+###
+GET http://127.0.0.1:8080/a.txt?chunked=1
+Authorization: Basic Y2xpZW50MToxMjM=
+Connection: Keep-Alive
+
+
+###
+POST http://localhost:8080/upload?path=/client1/test/test2/
+Authorization: Basic Y2xpZW50MToxMjM=
+Connection: Keep-Alive
