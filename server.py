@@ -2,6 +2,7 @@
 import base64
 import json
 import random
+import re
 import socket
 import os
 import stat
@@ -167,6 +168,10 @@ class HTTPServer:
 
     def accept_request(self, client_sock: socket, client_addr):
         client_sock.settimeout(1)
+        request = ""
+        response = ""
+        ifPost = 0
+        ifOverSize = 0
         try:
             while True:
                 data = client_sock.recv(4096)
@@ -174,7 +179,39 @@ class HTTPServer:
                 if not data:
                     break
                 req = data.decode("utf-8")
-                response, keep = self.process_response(req)
+                request += req
+                formatted_data = req.strip().split(CRLF)
+                request_words = formatted_data[0].split()
+                if request_words[0] == "POST":
+                    ifPost = 1
+                    for line in formatted_data:
+                        if line.strip():
+                            if line.split()[0] == "Content-Length:":
+                                if int(line.split()[1]) > 2048:
+                                    ifOverSize = 1
+                                    break
+
+                if ifPost == 1 and ifOverSize == 1:
+                    boundary = ""
+                    for line in formatted_data:
+                        if line.strip():
+                            if line.split()[0] == "Content-Type:":
+                                boundary = line.split()[2].split("=")[1]
+                                break
+                    while True:
+                        data = client_sock.recv(4096)
+                        print(data)
+                        if not data:
+                            break
+                        temp = data.decode("utf-8")
+                        request += temp
+                        if boundary in temp:
+                            break
+                    response, keep = self.process_response(request)
+                else:
+                    ifPost = 0
+                    ifOverSize = 0
+                    response, keep = self.process_response(req)
                 client_sock.sendall(response)
                 print(response)
                 if not keep:
@@ -352,9 +389,9 @@ class HTTPServer:
                 elif not os.path.exists(requested_file):
                     return self.resource_not_found(formatted_data,username)
                 elif "upload" in method:
-                    return self.post_request(1, requested_file, formatted_data, username)
+                    return self.post_request(1, requested_file, formatted_data, username,request)
                 elif "delete" in method:
-                    return self.post_request(2, requested_file, formatted_data, username)
+                    return self.post_request(2, requested_file, formatted_data, username,request)
             else:
                 return self.bad_request(formatted_data, username)
         if request_words[0] == "HEAD":
@@ -581,18 +618,42 @@ class HTTPServer:
         return content
 
     # TODO: Write the response to a POST request
-    def post_request(self, number, requested_file, data, username):
-        print(number)
-        print(requested_file)
-        print(data)
+    def post_request(self, number, requested_file, data, username,raw_data):
+        # print(number)
+        # print(requested_file)
+        # print(data)
         keep = self.check_keep(data)
         builder = ResponseBuilder()
-        # if int(number) == 1:
-        #     if not os.path.isdir(requested_file):
-        #         return self.bad_request(data,username)
-        #     for line in data:
-        #         if line.strip():
-        #             if line.split()[0] == "filename"
+        if int(number) == 1:
+            if not os.path.isdir(requested_file):
+                return self.bad_request(data,username)
+            boundary = ""
+            for line in data:
+                if line.strip():
+                    if line.split()[0] == "Content-Type:":
+                        boundary = line.split()[2].split("=")[1]
+                        break
+
+            sections = "".join(raw_data).split("--" + boundary)
+            fileInfo = sections[1]
+            # print(fileInfo)
+            match = re.search(r'filename="(.+?)"', fileInfo)
+            if match:
+                filename = match.group(1)
+                parts = fileInfo.split(filename)
+                fileContent = parts[1]
+                fileContent = fileContent[5:]
+                print(parts)
+                print(filename)
+                print(fileContent)
+                filePath = requested_file + "/" + filename
+                print(filePath)
+                try:
+                    with open(filePath, 'x') as file:
+                        file.write(fileContent)
+                except FileExistsError:
+                    print(f"File '{filePath}' already exists. Choose a different file name.")
+                    return self.bad_request(data,username)
         if int(number) == 2:
             if os.path.isdir(requested_file):
                 return self.bad_request(data,username)
