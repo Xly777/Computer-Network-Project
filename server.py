@@ -276,13 +276,15 @@ class HTTPServer:
                     break
         return has_cookie, cookie
 
-    def add_cookie(self, username, builder):
+    def add_cookie(self, username, builder, has_cookie):
         cookie = self.generate_cookie()
         if self.cookie.get(username) is not None:
             old_cookie = self.cookie[username][0]
             expire = self.cookie[username][1]
             if time.time() - expire < 3600:
                 cookie = old_cookie
+        if not has_cookie:
+            cookie = self.generate_cookie()
         store_cookie(cookie, username)
         builder.add_header("Set-Cookie", f"session-id={cookie}")
 
@@ -313,7 +315,7 @@ class HTTPServer:
             os.mkdir(self.working_dir + "/" + username)
         if request_words[0] == "GET":
             if "upload" in PathAndParams or "delete" in PathAndParams:
-                return self.method_not_allowed(formatted_data, username)
+                return self.method_not_allowed(formatted_data, username, has_cookie)
             requested_file = ''
             number = -2
             tempParams = ''
@@ -324,55 +326,55 @@ class HTTPServer:
                 requested_file = self.working_dir + tempFile
                 print(requested_file)
                 if not os.path.exists(requested_file):
-                    return self.resource_not_found(formatted_data, username)
+                    return self.resource_not_found(formatted_data, username, has_cookie)
                 if os.path.isdir(requested_file):
                     parts1 = requested_file.split("/")
                     authority = parts1[2] if len(parts1) >= 3 else -1
                     if authority in self.auth and authority != -1:
                         if authority != username:
-                            return self.resource_forbidden(formatted_data, username)
+                            return self.resource_forbidden(formatted_data, username, has_cookie)
                     tempParams = parts[1]
                     number = tempParams[-1]
                     if tempParams != "SUSTech-HTTP=0" and tempParams != "SUSTech-HTTP=1":
-                        return self.bad_request(formatted_data, username)
+                        return self.bad_request(formatted_data, username, has_cookie)
                 else:
                     parts1 = requested_file.split("/")
                     authority = parts1[2] if len(parts1) > 3 else -1
                     if authority in self.auth and authority != -1:
                         if authority != username:
-                            return self.resource_forbidden(formatted_data, username)
+                            return self.resource_forbidden(formatted_data, username, has_cookie)
                     tempParams = parts[1]
                     number = 3
                     if tempParams != "chunked=1":
-                        return self.bad_request(formatted_data, username)
+                        return self.bad_request(formatted_data, username, has_cookie)
             else:
                 tempFile = PathAndParams
                 tempFile = tempFile.rstrip('/')
                 requested_file = self.working_dir + tempFile
                 print(requested_file)
                 if not os.path.exists(requested_file):
-                    return self.resource_not_found(formatted_data, username)
+                    return self.resource_not_found(formatted_data, username, has_cookie)
                 if os.path.isdir(requested_file):
                     parts = requested_file.split("/")
                     authority = parts[2] if len(parts) >= 3 else -1
                     if authority in self.auth and authority != -1:
                         if authority != username:
-                            return self.resource_forbidden(formatted_data, username)
+                            return self.resource_forbidden(formatted_data, username, has_cookie)
                     number = 0
                 else:
                     parts = requested_file.split("/")
                     authority = parts[2] if len(parts) > 3 else -1
                     if authority in self.auth and authority != -1:
                         if authority != username:
-                            return self.resource_forbidden(formatted_data, username)
+                            return self.resource_forbidden(formatted_data, username, has_cookie)
                     number = 2
-            return self.get_request(requested_file, number, formatted_data, username)
+            return self.get_request(requested_file, number, formatted_data, username, has_cookie)
 
         if request_words[0] == "POST":
             if "upload" not in PathAndParams and "delete" not in PathAndParams:
-                return self.method_not_allowed(formatted_data, username)
+                return self.method_not_allowed(formatted_data, username, has_cookie)
             if "path" not in PathAndParams:
-                return self.bad_request(formatted_data, username)
+                return self.bad_request(formatted_data, username, has_cookie)
             if "?" in PathAndParams:
                 method = PathAndParams.split("?")[0]
                 params = PathAndParams.split("?")[1]
@@ -385,18 +387,18 @@ class HTTPServer:
                 parts = requested_file.split("/")
                 authority = parts[2]
                 if authority != username:
-                    return self.resource_forbidden(formatted_data, username)
+                    return self.resource_forbidden(formatted_data, username, has_cookie)
                 elif not os.path.exists(requested_file):
-                    return self.resource_not_found(formatted_data,username)
+                    return self.resource_not_found(formatted_data, username, has_cookie)
                 elif "upload" in method:
-                    return self.post_request(1, requested_file, formatted_data, username,request)
+                    return self.post_request(1, requested_file, formatted_data, username, request, has_cookie)
                 elif "delete" in method:
-                    return self.post_request(2, requested_file, formatted_data, username,request)
+                    return self.post_request(2, requested_file, formatted_data, username, request, has_cookie)
             else:
-                return self.bad_request(formatted_data, username)
+                return self.bad_request(formatted_data, username, has_cookie)
         if request_words[0] == "HEAD":
             if "upload" in PathAndParams or "delete" in PathAndParams:
-                return self.method_not_allowed(formatted_data, username)
+                return self.method_not_allowed(formatted_data, username, has_cookie)
             requested_file = ''
             number = -2
             tempParams = ''
@@ -407,56 +409,56 @@ class HTTPServer:
                 requested_file = self.working_dir + tempFile
                 print(requested_file)
                 if not os.path.exists(requested_file):
-                    return self.resource_not_found(formatted_data, username)
+                    return self.resource_not_found(formatted_data, username, has_cookie)
                 if os.path.isdir(requested_file):
                     parts1 = requested_file.split("/")
                     authority = parts1[2] if len(parts1) >= 3 else -1
                     if authority in self.auth and authority != -1:
                         if authority != username:
-                            return self.resource_forbidden(formatted_data, username)
+                            return self.resource_forbidden(formatted_data, username, has_cookie)
                     tempParams = parts[1]
                     number = tempParams[-1]
                     if tempParams != "SUSTech-HTTP=0" and tempParams != "SUSTech-HTTP=1":
-                        return self.bad_request(formatted_data, username)
+                        return self.bad_request(formatted_data, username, has_cookie)
                 else:
                     parts1 = requested_file.split("/")
                     authority = parts1[2] if len(parts1) > 3 else -1
                     if authority in self.auth and authority != -1:
                         if authority != username:
-                            return self.resource_forbidden(formatted_data, username)
+                            return self.resource_forbidden(formatted_data, username, has_cookie)
                     tempParams = parts[1]
                     number = 3
                     if tempParams != "chunked=1":
-                        return self.bad_request(formatted_data, username)
+                        return self.bad_request(formatted_data, username, has_cookie)
             else:
                 tempFile = PathAndParams
                 tempFile = tempFile.rstrip('/')
                 requested_file = self.working_dir + tempFile
                 print(requested_file)
                 if not os.path.exists(requested_file):
-                    return self.resource_not_found(formatted_data, username)
+                    return self.resource_not_found(formatted_data, username, has_cookie)
                 if os.path.isdir(requested_file):
                     parts = requested_file.split("/")
                     authority = parts[2] if len(parts) >= 3 else -1
                     if authority in self.auth and authority != -1:
                         if authority != username:
-                            return self.resource_forbidden(formatted_data, username)
+                            return self.resource_forbidden(formatted_data, username, has_cookie)
                     number = 0
                 else:
                     parts = requested_file.split("/")
                     authority = parts[2] if len(parts) > 3 else -1
                     if authority in self.auth and authority != -1:
                         if authority != username:
-                            return self.resource_forbidden(formatted_data, username)
+                            return self.resource_forbidden(formatted_data, username, has_cookie)
                     number = 2
-            return self.head_request(requested_file, number, formatted_data, username)
-        return self.method_not_allowed(formatted_data,username)
+            return self.head_request(requested_file, number, formatted_data, username, has_cookie)
+        return self.method_not_allowed(formatted_data, username, has_cookie)
 
     # The response to a HEADER request
-    def head_request(self, requested_file, number, data: list[str], username):
+    def head_request(self, requested_file, number, data: list[str], username, has_cookie):
         keep = self.check_keep(data)
         if not has_permission_other(requested_file):
-            return self.resource_forbidden(data, username)
+            return self.resource_forbidden(data, username, has_cookie)
         else:
             builder = ResponseBuilder()
             if int(number) == 1 and os.path.isdir(requested_file):
@@ -481,17 +483,16 @@ class HTTPServer:
                 builder.add_header("Connection", "Keep-Alive")
             else:
                 builder.add_header("Connection", "Close")
-            self.add_cookie(username, builder)
+            self.add_cookie(username, builder, has_cookie)
             return builder.build(), keep
 
-
     # TODO: Write the response to a GET request
-    def get_request(self, requested_file, number, data: list[str], username):
+    def get_request(self, requested_file, number, data: list[str], username, has_cookie):
         print(number)
         print(requested_file)
         keep = self.check_keep(data)
         if not has_permission_other(requested_file):
-            return self.resource_forbidden(data, username)
+            return self.resource_forbidden(data, username,has_cookie)
         else:
             builder = ResponseBuilder()
             # if should_return_binary(requested_file.split(".")[1]):
@@ -522,13 +523,12 @@ class HTTPServer:
                 builder.add_header("Content-Type", media_type)
                 builder.add_header("Transfer-Encoding", "chunked")
 
-
             builder.set_status("200", "OK")
             if keep:
                 builder.add_header("Connection", "Keep-Alive")
             else:
                 builder.add_header("Connection", "Close")
-            self.add_cookie(username, builder)
+            self.add_cookie(username, builder, has_cookie)
             return builder.build(), keep
 
         # """
@@ -571,26 +571,26 @@ class HTTPServer:
         if directory.count("/") > 1:
             parent_directory = '/'.join(directory.split("/")[:-1])
             if parent_directory == self.working_dir:
-                request_parent = f'http://localhost:9001/'
+                request_parent = f'http://localhost:8080/'
             else:
-                request_parent = f'http://localhost:9001/{"/".join(result.split("/")[:-1])}/'
+                request_parent = f'http://localhost:8080/{"/".join(result.split("/")[:-1])}/'
             content += f"""
                          <li><a href="#" onclick="sendGetRequest('{request_parent}')">./</a></li>
                         """
 
-        request_root = f'http://localhost:9001/'
+        request_root = f'http://localhost:8080/'
         content += f"""
                         <li><a href="#" onclick="sendGetRequest('{request_root}')">../</a></li>
                     """
         for item in os.listdir(directory):
             temp = directory + "/" + f"{item}"
             if os.path.isdir(temp):
-                request = f'http://localhost:9001/{result}/{item}'
+                request = f'http://localhost:8080/{result}/{item}'
                 content += f"""
                                             <li><a href="#" onclick="sendGetRequest('{request}')">{item}/</a></li>
                                             """
             else:
-                request = f'http://localhost:9001/{result}/{item}'
+                request = f'http://localhost:8080/{result}/{item}'
                 content += f"""
                                             <li><a href="#" onclick="sendGetRequest('{request}')">{item}</a></li>
                                             """
@@ -618,7 +618,7 @@ class HTTPServer:
         return content
 
     # TODO: Write the response to a POST request
-    def post_request(self, number, requested_file, data, username,raw_data):
+    def post_request(self, number, requested_file, data, username, raw_data, has_cookie):
         # print(number)
         # print(requested_file)
         # print(data)
@@ -626,7 +626,7 @@ class HTTPServer:
         builder = ResponseBuilder()
         if int(number) == 1:
             if not os.path.isdir(requested_file):
-                return self.bad_request(data,username)
+                return self.bad_request(data, username,has_cookie)
             boundary = ""
             for line in data:
                 if line.strip():
@@ -653,10 +653,10 @@ class HTTPServer:
                         file.write(fileContent)
                 except FileExistsError:
                     print(f"File '{filePath}' already exists. Choose a different file name.")
-                    return self.bad_request(data,username)
+                    return self.bad_request(data, username,has_cookie)
         if int(number) == 2:
             if os.path.isdir(requested_file):
-                return self.bad_request(data,username)
+                return self.bad_request(data, username,has_cookie)
             os.remove(requested_file)
         builder.set_status("200", "OK")
         if keep:
@@ -665,7 +665,7 @@ class HTTPServer:
             builder.add_header("Connection", "Close")
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("post.html"))
-        self.add_cookie(username, builder)
+        self.add_cookie(username, builder, has_cookie)
         return builder.build(), keep
 
         # """
@@ -717,7 +717,7 @@ class HTTPServer:
         builder.set_content(get_file_contents("401.html"))
         return builder.build(), keep
 
-    def method_not_allowed(self, data, username):
+    def method_not_allowed(self, data, username, has_cookie):
         keep = self.check_keep(data)
         """
         Returns 405 not allowed status and gives allowed methods.
@@ -734,11 +734,11 @@ class HTTPServer:
             builder.add_header("Connection", "Keep-Alive")
         else:
             builder.add_header("Connection", "Close")
-        self.add_cookie(username, builder)
+        self.add_cookie(username, builder, has_cookie)
         return builder.build(), keep
 
     # TODO: Make a function that handles not found error
-    def resource_not_found(self, data, username):
+    def resource_not_found(self, data, username, has_cookie):
         keep = self.check_keep(data)
         """
         Returns 404 not found status and sends back our 404.html page.
@@ -751,11 +751,11 @@ class HTTPServer:
             builder.add_header("Connection", "Close")
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("404.html"))
-        self.add_cookie(username, builder)
+        self.add_cookie(username, builder, has_cookie)
         return builder.build(), keep
 
     # TODO: Make a function that handles forbidden error
-    def resource_forbidden(self, data, username):
+    def resource_forbidden(self, data, username, has_cookie):
         keep = self.check_keep(data)
         """
         Returns 403 FORBIDDEN status and sends back our 403.html page.
@@ -768,10 +768,10 @@ class HTTPServer:
             builder.add_header("Connection", "Close")
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("403.html"))
-        self.add_cookie(username, builder)
+        self.add_cookie(username, builder, has_cookie)
         return builder.build(), keep
 
-    def bad_request(self, data, username):
+    def bad_request(self, data, username, has_cookie):
         keep = self.check_keep(data)
         """
         Returns 400 Bad Request status and sends back our 400.html page.
@@ -784,7 +784,7 @@ class HTTPServer:
             builder.add_header("Connection", "Close")
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("400.html"))
-        self.add_cookie(username, builder)
+        self.add_cookie(username, builder, has_cookie)
         return builder.build(), keep
 
 
