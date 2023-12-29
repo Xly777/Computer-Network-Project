@@ -48,3 +48,9 @@ Connection: Keep-Alive
 POST http://localhost:8080/upload?path=/client1/test/test2/
 Authorization: Basic Y2xpZW50MToxMjM=
 Connection: Keep-Alive
+
+###
+GET http://127.0.0.1:8080/client1/a.txt
+Authorization: Basic Y2xpZW50MToxMjM=
+Connection: Keep-Alive
+Range: 0-1,1-2,2-3

@@ -319,6 +319,7 @@ class HTTPServer:
             requested_file = ''
             number = -2
             tempParams = ''
+            range = []
             if "?" in PathAndParams:
                 parts = PathAndParams.split("?")
                 tempFile = parts[0]
@@ -368,7 +369,13 @@ class HTTPServer:
                         if authority != username:
                             return self.resource_forbidden(formatted_data, username, has_cookie)
                     number = 2
-            return self.get_request(requested_file, number, formatted_data, username, has_cookie)
+                    for line in formatted_data:
+                        if line.strip():
+                            if line.split()[0].lower() == 'range:':
+                                range = self.processRange(line)
+                                number = 4
+                                break
+            return self.get_request(requested_file, number, range,formatted_data, username, has_cookie)
 
         if request_words[0] == "POST":
             if "upload" not in PathAndParams and "delete" not in PathAndParams:
@@ -450,9 +457,57 @@ class HTTPServer:
                     if authority in self.auth and authority != -1:
                         if authority != username:
                             return self.resource_forbidden(formatted_data, username, has_cookie)
+
+
                     number = 2
             return self.head_request(requested_file, number, formatted_data, username, has_cookie)
         return self.method_not_allowed(formatted_data, username, has_cookie)
+
+
+    def processRange(self, raw_string):
+        # pattern = r'\d+.*\d+'
+        pattern = r'-?\d+.*\d+-?'
+        # 使用正则表达式进行匹配
+        match = re.search(pattern, raw_string)
+        range = match[0]
+        parts = []
+        if "," in range:
+            parts = range.split(",")
+        else:
+            parts.append(range)
+        return parts
+
+    def checkRangeValid(self,raw_string,file_size):
+        parts = raw_string.split("-")
+        # print(parts)
+        if parts[0] == "" or parts[1] == "":
+            if parts[0] == "":
+                number2 = int(parts[1])
+                if number2 >= file_size:
+                    return False
+            return True
+        else:
+            number1 = int(parts[0])
+            number2 = int(parts[1])
+            if number1 > number2:
+                return False
+            if number1 < 0 or number2 >= file_size:
+                return False
+        return True
+
+    def calculateRange(self,raw_string):
+        parts = raw_string.split("-")
+        if parts[0] == "" or parts[1] == "":
+            if parts[0] == "":
+                number2 = int(parts[1])
+                return "-",number2
+            if parts[1] == "":
+                number1 = int(parts[0])
+                return number1,"-"
+        else:
+            number1 = int(parts[0])
+            number2 = int(parts[1])
+            return number1,number2
 
     # The response to a HEADER request
     def head_request(self, requested_file, number, data: list[str], username, has_cookie):
@@ -487,9 +542,9 @@ class HTTPServer:
             return builder.build(), keep
 
     # TODO: Write the response to a GET request
-    def get_request(self, requested_file, number, data: list[str], username, has_cookie):
-        print(number)
-        print(requested_file)
+    def get_request(self, requested_file, number,range, data: list[str], username, has_cookie):
+        # print(number)
+        # print(requested_file)
         keep = self.check_keep(data)
         if not has_permission_other(requested_file):
             return self.resource_forbidden(data, username,has_cookie)
@@ -504,6 +559,7 @@ class HTTPServer:
                 content = self.get_directory_content(requested_file)
                 builder.set_content(content)
                 builder.add_header("Content-Type", "application/json")
+                builder.set_status("200", "OK")
             elif int(number) == 2:
                 # Case: Return file binary content
                 file_content = get_file_binary_contents(requested_file)
@@ -511,10 +567,12 @@ class HTTPServer:
                 media_type, encoding = mimetypes.guess_type(requested_file)
                 builder.add_header("Content-Type", media_type)
                 builder.add_header("Content-Length", str(len(file_content)))
+                builder.set_status("200", "OK")
             elif int(number) == 0:
                 # Case: Show HTML page for directory or file
                 builder.set_content(self.get_directory_html(requested_file, username))
                 builder.add_header("Content-Type", "text/html")
+                builder.set_status("200", "OK")
             elif int(number) == 3:
                 # Case: Chunked transfer
                 file_content = get_file_binary_contents(requested_file)
@@ -522,8 +580,93 @@ class HTTPServer:
                 media_type, encoding = mimetypes.guess_type(requested_file)
                 builder.add_header("Content-Type", media_type)
                 builder.add_header("Transfer-Encoding", "chunked")
+                builder.set_status("200", "OK")
+            elif int(number) == 4:
+                # Case: Breakpoint Transmission
+                # print(range)
+                file_size = os.path.getsize(requested_file)
+                file_content = get_file_binary_contents(requested_file)
+                file_size = len(file_content)
+                if len(range) == 2:
+                    if range[0] == "0-0" and range[1] == "-1":
+                        first_byte = file_content[0:1]
+                        last_byte = file_content[-1:]
+                        temp = first_byte + last_byte
+                        builder.set_content(temp)
+                        media_type, encoding = mimetypes.guess_type(requested_file)
+                        builder.add_header("Content-Type", media_type)
+                        builder.add_header("Content-Length", str(2))
+                        builder.add_header("Content-Range", f"bytes 0-0,-1/{file_size}")
+                        builder.set_status("200", "OK")
+                        if keep:
+                            builder.add_header("Connection", "Keep-Alive")
+                        else:
+                            builder.add_header("Connection", "Close")
+                        self.add_cookie(username, builder, has_cookie)
+                        return builder.build(), keep
+                for item in range:
+                    if not self.checkRangeValid(item,file_size):
+                        return self.Range_Not_Satisfiable(data, username, has_cookie)
+                if len(range) == 1:
+                    start,end = self.calculateRange(range[0])
+                    if start == "-":
+                        builder.set_content(file_content[-end:])
+                        media_type, encoding = mimetypes.guess_type(requested_file)
+                        builder.add_header("Content-Type", media_type)
+                        builder.add_header("Content-Range", f"bytes -{end}/{file_size}")
+                        builder.add_header("Content-Length", str(end))
+                        builder.set_status("206", "Partial Content")
+                    elif end == "-":
+                        temp = file_size - start
+                        builder.set_content(file_content[-temp:])
+                        media_type, encoding = mimetypes.guess_type(requested_file)
+                        builder.add_header("Content-Type", media_type)
+                        builder.add_header("Content-Range", f"bytes {start}-/{file_size}")
+                        builder.add_header("Content-Length", str(file_size-start))
+                        builder.set_status("206", "Partial Content")
+                    else:
+                        builder.set_content(file_content[start:end+1])
+                        media_type, encoding = mimetypes.guess_type(requested_file)
+                        builder.add_header("Content-Type", media_type)
+                        builder.add_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+                        builder.add_header("Content-Length", str(end-start+1))
+                        builder.set_status("206", "Partial Content")
+                else:
+                    builder.add_header("Content-Type", "multipart/byteranges; boundary=3d6b6a416f9b5")
+                    tempContent = b''
+                    media_type, encoding = mimetypes.guess_type(requested_file)
+                    for item in range:
+                        start, end = self.calculateRange(item)
+                        if start == "-":
+                            tempContent += b'--3d6b6a416f9b5\r\n'
+                            tempContent += b'Content-Type: ' + media_type.encode() + b'\r\n'
+                            tempContent += b'Content-Range: bytes -' + str(end).encode() + b'/' + str(file_size).encode() + b'\r\n'
+                            tempContent += b'\r\n'
+                            tempContent += file_content[-end:]
+                            tempContent += b'\r\n'
 
-            builder.set_status("200", "OK")
+                        elif end == "-":
+                            temp = file_size - start
+                            tempContent += b'--3d6b6a416f9b5\r\n'
+                            tempContent += b'Content-Type: ' + media_type.encode() + b'\r\n'
+                            tempContent += b'Content-Range: bytes ' + str(start).encode() + b'-/' + str(file_size).encode() + b'\r\n'
+                            tempContent += b'\r\n'
+                            tempContent += file_content[-temp:]
+                            tempContent += b'\r\n'
+
+                        else:
+                            tempContent += b'--3d6b6a416f9b5\r\n'
+                            tempContent += b'Content-Type: ' + media_type.encode() + b'\r\n'
+                            tempContent += b'Content-Range: bytes ' + str(start).encode() + b'-' + str(end).encode() + b'/' + str(file_size).encode() + b'\r\n'
+                            tempContent += b'\r\n'
+                            tempContent += file_content[start:end + 1]
+                            tempContent += b'\r\n'
+
+                    tempContent += b'--3d6b6a416f9b5--\r\n'
+                    print(tempContent.decode("utf-8"))
+                    builder.set_content(tempContent)
+                    builder.add_header("Content-Length", str(len(tempContent)))
+                    builder.set_status("206", "Partial Content")
             if keep:
                 builder.add_header("Connection", "Keep-Alive")
             else:
@@ -643,11 +786,11 @@ class HTTPServer:
                 parts = fileInfo.split(filename)
                 fileContent = parts[1]
                 fileContent = fileContent[5:]
-                print(parts)
-                print(filename)
-                print(fileContent)
+                # print(parts)
+                # print(filename)
+                # print(fileContent)
                 filePath = requested_file + "/" + filename
-                print(filePath)
+                # print(filePath)
                 try:
                     with open(filePath, 'x') as file:
                         file.write(fileContent)
@@ -784,6 +927,22 @@ class HTTPServer:
             builder.add_header("Connection", "Close")
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("400.html"))
+        self.add_cookie(username, builder, has_cookie)
+        return builder.build(), keep
+
+    def Range_Not_Satisfiable(self, data, username, has_cookie):
+        keep = self.check_keep(data)
+        """
+        Returns 416 
+        """
+        builder = ResponseBuilder()
+        builder.set_status("416", "Range Not Satisfiable")
+        if keep:
+            builder.add_header("Connection", "Keep-Alive")
+        else:
+            builder.add_header("Connection", "Close")
+        builder.add_header("Content-Type", mime_types["html"])
+        builder.set_content(get_file_contents("416.html"))
         self.add_cookie(username, builder, has_cookie)
         return builder.build(), keep
 
