@@ -149,7 +149,7 @@ class HTTPServer:
 
     def teardown_socket(self):
         if self.sock is not None:
-            self.sock.shutdown()
+            self.sock.shutdown(2)
             self.sock.close()
 
     def accept(self):
@@ -167,59 +167,59 @@ class HTTPServer:
         return keep
 
     def accept_request(self, client_sock: socket, client_addr):
-        client_sock.settimeout(1)
+        # client_sock.settimeout(1)
         request = ""
         response = ""
         ifPost = 0
         ifOverSize = 0
-        try:
-            while True:
-                data = client_sock.recv(4096)
-                print(data)
-                if not data:
-                    break
-                req = data.decode("utf-8")
-                request += req
-                formatted_data = req.strip().split(CRLF)
-                request_words = formatted_data[0].split()
-                if request_words[0] == "POST":
-                    ifPost = 1
-                    for line in formatted_data:
-                        if line.strip():
-                            if line.split()[0] == "Content-Length:":
-                                if int(line.split()[1]) > 2048:
-                                    ifOverSize = 1
-                                    break
-
-                if ifPost == 1 and ifOverSize == 1:
-                    boundary = ""
-                    for line in formatted_data:
-                        if line.strip():
-                            if line.split()[0] == "Content-Type:":
-                                boundary = line.split()[2].split("=")[1]
+        # try:
+        while True:
+            data = client_sock.recv(4096)
+            print(data)
+            if not data:
+                break
+            req = data.decode("utf-8")
+            request += req
+            formatted_data = req.strip().split(CRLF)
+            request_words = formatted_data[0].split()
+            if request_words[0] == "POST":
+                ifPost = 1
+                for line in formatted_data:
+                    if line.strip():
+                        if line.split()[0] == "Content-Length:":
+                            if int(line.split()[1]) > 2048:
+                                ifOverSize = 1
                                 break
-                    while True:
-                        data = client_sock.recv(4096)
-                        print(data)
-                        if not data:
+
+            if ifPost == 1 and ifOverSize == 1:
+                boundary = ""
+                for line in formatted_data:
+                    if line.strip():
+                        if line.split()[0] == "Content-Type:":
+                            boundary = line.split()[2].split("=")[1]
                             break
-                        temp = data.decode("utf-8")
-                        request += temp
-                        if boundary in temp:
-                            break
-                    response, keep = self.process_response(request)
-                else:
-                    ifPost = 0
-                    ifOverSize = 0
-                    response, keep = self.process_response(req)
-                client_sock.sendall(response)
-                print(response)
-                if not keep:
-                    break
-        except socket.timeout:
-            pass
-        finally:
-            client_sock.close()
+                while True:
+                    data = client_sock.recv(4096)
+                    print(data)
+                    if not data:
+                        break
+                    temp = data.decode("utf-8")
+                    request += temp
+                    if boundary in temp:
+                        break
+                response, keep = self.process_response(request)
+            else:
+                ifPost = 0
+                ifOverSize = 0
+                response, keep = self.process_response(req)
+            client_sock.sendall(response)
+            if not keep:
+                break
+        # except socket.timeout:
+        #     pass
+        # finally:
+        #     client_sock.close()
+        client_sock.close()
 
     def check_has_auth(self, data: list[str]):
         has_auth = False
@@ -547,7 +547,7 @@ class HTTPServer:
         # print(requested_file)
         keep = self.check_keep(data)
         if not has_permission_other(requested_file):
-            return self.resource_forbidden(data, username,has_cookie)
+            return self.resource_forbidden(data, username, has_cookie)
         else:
             builder = ResponseBuilder()
             # if should_return_binary(requested_file.split(".")[1]):
@@ -769,7 +769,7 @@ class HTTPServer:
         builder = ResponseBuilder()
         if int(number) == 1:
             if not os.path.isdir(requested_file):
-                return self.bad_request(data, username,has_cookie)
+                return self.bad_request(data, username, has_cookie)
             boundary = ""
             for line in data:
                 if line.strip():
@@ -796,10 +796,10 @@ class HTTPServer:
                         file.write(fileContent)
                 except FileExistsError:
                     print(f"File '{filePath}' already exists. Choose a different file name.")
-                    return self.bad_request(data, username,has_cookie)
+                    return self.bad_request(data, username, has_cookie)
         if int(number) == 2:
             if os.path.isdir(requested_file):
-                return self.bad_request(data, username,has_cookie)
+                return self.bad_request(data, username, has_cookie)
             os.remove(requested_file)
         builder.set_status("200", "OK")
         if keep:
@@ -846,6 +846,8 @@ class HTTPServer:
             builder.add_header("Connection", "Keep-Alive")
         else:
             builder.add_header("Connection", "Close")
+        builder.add_header("Content-Type", "text/html")
+        builder.add_header("Content-Length", len(get_file_contents("401.html")))
         builder.set_content(get_file_contents("401.html"))
         return builder.build(), keep
 
@@ -857,6 +859,8 @@ class HTTPServer:
             builder.add_header("Connection", "Keep-Alive")
         else:
             builder.add_header("Connection", "Close")
+        builder.add_header("Content-Type", "text/html")
+        builder.add_header("Content-Length", len(get_file_contents("401.html")))
         builder.set_content(get_file_contents("401.html"))
         return builder.build(), keep
 
@@ -878,6 +882,8 @@ class HTTPServer:
         else:
             builder.add_header("Connection", "Close")
         self.add_cookie(username, builder, has_cookie)
+        builder.add_header("Content-Type", "text/plain")
+        builder.add_header("Content-Length", 0)
         return builder.build(), keep
 
     # TODO: Make a function that handles not found error
@@ -895,6 +901,8 @@ class HTTPServer:
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("404.html"))
         self.add_cookie(username, builder, has_cookie)
+        builder.add_header("Content-Type", "text/html")
+        builder.add_header("Content-Length", len(get_file_contents("404.html")))
         return builder.build(), keep
 
     # TODO: Make a function that handles forbidden error
@@ -912,6 +920,8 @@ class HTTPServer:
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("403.html"))
         self.add_cookie(username, builder, has_cookie)
+        builder.add_header("Content-Type", "text/html")
+        builder.add_header("Content-Length", len(get_file_contents("403.html")))
         return builder.build(), keep
 
     def bad_request(self, data, username, has_cookie):
@@ -928,6 +938,7 @@ class HTTPServer:
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("400.html"))
         self.add_cookie(username, builder, has_cookie)
+        builder.add_header("Content-Length", len(get_file_contents("400.html")))
         return builder.build(), keep
 
     def Range_Not_Satisfiable(self, data, username, has_cookie):
@@ -944,6 +955,7 @@ class HTTPServer:
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("416.html"))
         self.add_cookie(username, builder, has_cookie)
+        builder.add_header("Content-Length", len(get_file_contents("401.html")))
         return builder.build(), keep
 
 
