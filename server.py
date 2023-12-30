@@ -559,6 +559,7 @@ class HTTPServer:
                 content = self.get_directory_content(requested_file)
                 builder.set_content(content)
                 builder.add_header("Content-Type", "application/json")
+                builder.add_header("Content-Length", str(len(content)))
                 builder.set_status("200", "OK")
             elif int(number) == 2:
                 # Case: Return file binary content
@@ -570,8 +571,10 @@ class HTTPServer:
                 builder.set_status("200", "OK")
             elif int(number) == 0:
                 # Case: Show HTML page for directory or file
-                builder.set_content(self.get_directory_html(requested_file, username))
+                content = self.get_directory_html(requested_file, username)
+                builder.set_content(content)
                 builder.add_header("Content-Type", "text/html")
+                builder.add_header("Content-Length", str(len(content)))
                 builder.set_status("200", "OK")
             elif int(number) == 3:
                 # Case: Chunked transfer
@@ -808,6 +811,7 @@ class HTTPServer:
             builder.add_header("Connection", "Close")
         builder.add_header("Content-Type", mime_types["html"])
         builder.set_content(get_file_contents("post.html"))
+        builder.add_header("Content-Length", len(get_file_contents("post.html")))
         self.add_cookie(username, builder, has_cookie)
         return builder.build(), keep
 
