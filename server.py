@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import base64
 import json
 import random
@@ -9,6 +10,7 @@ import stat
 import threading
 import time
 import mimetypes
+
 
 from threading import Thread
 
@@ -1167,6 +1169,17 @@ class ResponseBuilder:
         # Where CRLF is our `NEWLINE` constant.
         # """
 
+def main():
+    """
+    Parses the command line arguments and starts the server.
+    """
+    parser = argparse.ArgumentParser(description="A simple HTTP server.")
+    parser.add_argument("-i", "--host", type=str, default="localhost", help="The host to serve on.")
+    parser.add_argument("-p", "--port", type=int, default=8080, help="The port to listen on.")
+    parser.add_argument("-d", "--directory", type=str, default="./data", help="The directory to serve.")
+    args = parser.parse_args()
+    HTTPServer(args.host, args.port, args.directory)
+
 
 if __name__ == "__main__":
-    HTTPServer()
+    main()
