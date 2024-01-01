@@ -389,7 +389,7 @@ class HTTPServer:
                 params = params.split("=")[1]
                 params = params.replace("%2F", "/")
                 params = params.strip("/")
-                requested_file = "./data/" + params
+                requested_file = self.working_dir + "/" +params
                 print(requested_file)
                 parts = requested_file.split("/")
                 authority = parts[2]

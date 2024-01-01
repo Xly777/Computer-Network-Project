@@ -4,15 +4,12 @@ import time
 import requests
 import http.server
 
-#Breakpoint Transmission
-url='http://127.0.0.1:8080/client1/a.txt'
+files = {"firstFile": open('data/a.txt', "rb")}
+
 
 data={}
-headers={"Authorization": "Basic Y2xpZW50MToxMjM=",
-         "Range": "0-1,1-2,2-3"}
-r=requests.get(url=url, data=data, headers=headers)
-print(r.content.decode())
-
-# headers={"Authorization": "Basic Y2xpZW50MToxMjM="}
-# r=requests.get(url='http://127.0.0.1:8080/a.txt', headers=headers)
-# print(r.content.decode())
+headers={"Authorization": "Basic Y2xpZW50MToxMjM="}
+r=requests.post(url='http://127.0.0.1:8080/upload?path=client1/',data=data,headers=headers, files=files)
+print(r)
+r=requests.post(url='http://127.0.0.1:8080/upload?path=client2/',data=data,headers=headers, files=files)
+print(r)
