@@ -34,7 +34,7 @@ Authorization: Basic cm9vdDpyb290
 Connection: Keep-Alive
 
 ###
-GET http://localhost:8080/root/test/
+GET http://localhost:8080/client1/test/
 Authorization: Basic Y2xpZW50MToxMjM=
 Connection: Keep-Alive
 

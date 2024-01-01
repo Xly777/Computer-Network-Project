@@ -331,9 +331,9 @@ class HTTPServer:
                 if os.path.isdir(requested_file):
                     parts1 = requested_file.split("/")
                     authority = parts1[2] if len(parts1) >= 3 else -1
-                    if authority in self.auth and authority != -1:
-                        if authority != username:
-                            return self.resource_forbidden(formatted_data, username, has_cookie)
+                    # if authority in self.auth and authority != -1:
+                    #     if authority != username:
+                            # return self.resource_forbidden(formatted_data, username, has_cookie)
                     tempParams = parts[1]
                     number = tempParams[-1]
                     if tempParams != "SUSTech-HTTP=0" and tempParams != "SUSTech-HTTP=1":
@@ -341,9 +341,9 @@ class HTTPServer:
                 else:
                     parts1 = requested_file.split("/")
                     authority = parts1[2] if len(parts1) > 3 else -1
-                    if authority in self.auth and authority != -1:
-                        if authority != username:
-                            return self.resource_forbidden(formatted_data, username, has_cookie)
+                    # if authority in self.auth and authority != -1:
+                    #     if authority != username:
+                            # return self.resource_forbidden(formatted_data, username, has_cookie)
                     tempParams = parts[1]
                     number = 3
                     if tempParams != "chunked=1":
@@ -357,17 +357,17 @@ class HTTPServer:
                     return self.resource_not_found(formatted_data, username, has_cookie)
                 if os.path.isdir(requested_file):
                     parts = requested_file.split("/")
-                    authority = parts[2] if len(parts) >= 3 else -1
-                    if authority in self.auth and authority != -1:
-                        if authority != username:
-                            return self.resource_forbidden(formatted_data, username, has_cookie)
+                    # authority = parts[2] if len(parts) >= 3 else -1
+                    # if authority in self.auth and authority != -1:
+                    #     if authority != username:
+                    #         return self.resource_forbidden(formatted_data, username, has_cookie)
                     number = 0
                 else:
                     parts = requested_file.split("/")
                     authority = parts[2] if len(parts) > 3 else -1
-                    if authority in self.auth and authority != -1:
-                        if authority != username:
-                            return self.resource_forbidden(formatted_data, username, has_cookie)
+                    # if authority in self.auth and authority != -1:
+                    #     if authority != username:
+                    #         return self.resource_forbidden(formatted_data, username, has_cookie)
                     number = 2
                     for line in formatted_data:
                         if line.strip():
@@ -421,9 +421,9 @@ class HTTPServer:
                 if os.path.isdir(requested_file):
                     parts1 = requested_file.split("/")
                     authority = parts1[2] if len(parts1) >= 3 else -1
-                    if authority in self.auth and authority != -1:
-                        if authority != username:
-                            return self.resource_forbidden(formatted_data, username, has_cookie)
+                    # if authority in self.auth and authority != -1:
+                    #     if authority != username:
+                    #         return self.resource_forbidden(formatted_data, username, has_cookie)
                     tempParams = parts[1]
                     number = tempParams[-1]
                     if tempParams != "SUSTech-HTTP=0" and tempParams != "SUSTech-HTTP=1":
@@ -431,9 +431,9 @@ class HTTPServer:
                 else:
                     parts1 = requested_file.split("/")
                     authority = parts1[2] if len(parts1) > 3 else -1
-                    if authority in self.auth and authority != -1:
-                        if authority != username:
-                            return self.resource_forbidden(formatted_data, username, has_cookie)
+                    # if authority in self.auth and authority != -1:
+                    #     if authority != username:
+                    #         return self.resource_forbidden(formatted_data, username, has_cookie)
                     tempParams = parts[1]
                     number = 3
                     if tempParams != "chunked=1":
@@ -448,16 +448,16 @@ class HTTPServer:
                 if os.path.isdir(requested_file):
                     parts = requested_file.split("/")
                     authority = parts[2] if len(parts) >= 3 else -1
-                    if authority in self.auth and authority != -1:
-                        if authority != username:
-                            return self.resource_forbidden(formatted_data, username, has_cookie)
+                    # if authority in self.auth and authority != -1:
+                    #     if authority != username:
+                    #         return self.resource_forbidden(formatted_data, username, has_cookie)
                     number = 0
                 else:
                     parts = requested_file.split("/")
                     authority = parts[2] if len(parts) > 3 else -1
-                    if authority in self.auth and authority != -1:
-                        if authority != username:
-                            return self.resource_forbidden(formatted_data, username, has_cookie)
+                    # if authority in self.auth and authority != -1:
+                    #     if authority != username:
+                    #         return self.resource_forbidden(formatted_data, username, has_cookie)
                     number = 2
                     for line in formatted_data:
                         if line.strip():
