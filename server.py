@@ -14,62 +14,22 @@ import mimetypes
 
 from threading import Thread
 
-# Equivalent to CRLF, named CRLF for clarity
 CRLF = "\r\n"
 
-
-# Let's define some functions to help us deal with files, since reading them
-# and returning their data is going to be a very common operation.
-
 def get_file_contents(file_name):
-    """Returns the text content of `file_name`"""
     with open(file_name, "r") as f:
         return f.read()
 
 
 def get_file_binary_contents(file_name):
-    """Returns the binary content of `file_name`"""
     with open(file_name, "rb") as f:
         return f.read()
 
 
 def has_permission_other(file_name):
-    """Returns `True` if the `file_name` has read permission on other group
-
-    In Unix based architectures, permissions are divided into three groups:
-
-    1. Owner
-    2. Group
-    3. Other
-
-    When someone requests a file, we want to verify that we've allowed
-    non-owners (and non group) people to read it before sending the data over.
-    """
     stmode = os.stat(file_name).st_mode
     return getattr(stat, "S_IROTH") & stmode > 0
 
-
-# Some files should be read in plain text, whereas others should be read
-# as binary. To maintain a mapping from file types to their expected form, we
-# have a `set` that maintains membership of file extensions expected in binary.
-# We've defined a starting point for this set, which you may add to as necessary.
-# TODO: Finish this set with all relevant files types that should be read in binary
-binary_type_files = {"jpg", "jpeg", "mp3", "png", "html", "js", "css"}
-
-
-def should_return_binary(file_extension):
-    """
-    Returns `True` if the file with `file_extension` should be sent back as
-    binary.
-    """
-    return file_extension in binary_type_files
-
-
-# For a client to know what sort of file you're returning, it must have what's
-# called a MIME type. We will maintain a `dictionary` mapping file extensions
-# to their MIME type so that we may easily access the correct type when
-# responding to requests.
-# TODO: Finish this dictionary with all required MIME types
 mime_types = {
     "html": "text/html",
     "css": "text/css",
@@ -90,15 +50,10 @@ mime_types = {
     "txt": "text/plain",
     "json": "application/json",
     "xml": "application/xml",
-    # 添加其他需要的类型
 }
 
 
 def get_file_mime_type(file_extension):
-    """
-    Returns the MIME type for `file_extension` if present, otherwise
-    returns the MIME type for plain text.
-    """
     mime_type = mime_types[file_extension]
     return mime_type if mime_type is not None else "text/plain"
 
@@ -115,10 +70,6 @@ def store_cookie(cookie, username):
 
 
 class HTTPServer:
-    """
-    Our actual HTTP server which will service GET and POST requests.
-    """
-
     def __init__(self, host="localhost", port=8080, directory="./data"):
         self.auth: dict = {}
         self.cookie: dict = {}
@@ -127,6 +78,7 @@ class HTTPServer:
         self.port = port
         self.working_dir = directory
         self.load_auth()
+        self.load_cookie()
         self.load_cookie()
         self.setup_socket()
         self.accept()
@@ -169,12 +121,10 @@ class HTTPServer:
         return keep
 
     def accept_request(self, client_sock: socket, client_addr):
-        # client_sock.settimeout(1)
         request = ""
         response = ""
         ifPost = 0
         ifOverSize = 0
-        # try:
         while True:
             data = client_sock.recv(4096)
             print(data)
@@ -189,11 +139,12 @@ class HTTPServer:
                 for line in formatted_data:
                     if line.strip():
                         if line.split()[0] == "Content-Length:":
-                            if int(line.split()[1]) > 2048:
+                            if int(line.split()[1]) > 4096:
                                 ifOverSize = 1
                                 break
 
             if ifPost == 1 and ifOverSize == 1:
+                print(formatted_data)
                 boundary = ""
                 for line in formatted_data:
                     if line.strip():
@@ -214,14 +165,10 @@ class HTTPServer:
                 ifPost = 0
                 ifOverSize = 0
                 response, keep = self.process_response(req)
-            print(response)
+            # print(response)
             client_sock.sendall(response)
             if not keep:
                 break
-        # except socket.timeout:
-        #     pass
-        # finally:
-        #     client_sock.close()
         client_sock.close()
 
     def check_has_auth(self, data: list[str]):
@@ -234,6 +181,20 @@ class HTTPServer:
 
     def check_auth(self, data: list[str], cookie: str):
         user_base64 = ''
+        has_auth=False
+        for line in data:
+            if line.split()[0].lower() == 'authorization:' and line.split()[1].lower() == 'basic':
+                user_base64 = line.split()[2]
+                has_auth=True
+                break
+        if has_auth:
+            user = base64.b64decode(user_base64).decode()
+            user_name = user.split(":")[0]
+            password = user.split(":")[1]
+            if self.auth.get(user_name) is None or self.auth.get(user_name) != password:
+                return False, ""
+            else:
+                return True, user_name
         if cookie != '':
             lock = threading.Lock()
             cnt = 0
@@ -251,17 +212,6 @@ class HTTPServer:
                     return False, ""
                 else:
                     return True, username
-        for line in data:
-            if line.split()[0].lower() == 'authorization:' and line.split()[1].lower() == 'basic':
-                user_base64 = line.split()[2]
-                break
-        user = base64.b64decode(user_base64).decode()
-        user_name = user.split(":")[0]
-        password = user.split(":")[1]
-        if self.auth.get(user_name) is None or self.auth.get(user_name) != password:
-            return False, ""
-        else:
-            return True, user_name
 
     def generate_cookie(self, length=32):
         characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -487,7 +437,6 @@ class HTTPServer:
 
     def checkRangeValid(self,raw_string,file_size):
         parts = raw_string.split("-")
-        # print(parts)
         if parts[0] == "" or parts[1] == "":
             if parts[0] == "":
                 number2 = int(parts[1])
@@ -519,17 +468,11 @@ class HTTPServer:
 
     # The response to a HEADER request
     def head_request(self, requested_file, number,range, data: list[str], username, has_cookie):
-        # print(number)
-        # print(requested_file)
         keep = self.check_keep(data)
         if not has_permission_other(requested_file):
             return self.resource_forbidden(data, username, has_cookie)
         else:
             builder = ResponseBuilder()
-            # if should_return_binary(requested_file.split(".")[1]):
-            #     builder.set_content(get_file_binary_contents(requested_file))
-            # else:
-            #     builder.set_content(get_file_contents(requested_file))
             if int(number) == 1 and os.path.isdir(requested_file):
                 # Case: Return directory content as JSON
                 content = self.get_directory_content(requested_file)
@@ -562,7 +505,6 @@ class HTTPServer:
                 builder.set_status("200", "OK")
             elif int(number) == 4:
                 # Case: Breakpoint Transmission
-                # print(range)
                 file_size = os.path.getsize(requested_file)
                 file_content = get_file_binary_contents(requested_file)
                 file_size = len(file_content)
@@ -653,21 +595,6 @@ class HTTPServer:
             self.add_cookie(username, builder, has_cookie)
             return builder.build(), keep
 
-        # """
-        # Responds to a GET request with the associated bytes.
-        #
-        # If the request is to a file that does not exist, returns
-        # a `NOT FOUND` error.
-        #
-        # If the request is to a file that does not have the `other`
-        # read permission, returns a `FORBIDDEN` error.
-        #
-        # Otherwise, we must read the requested file's content, either
-        # in binary or text depending on `should_return_binary` and
-        # send it back with a status set and appropriate mime type
-        # depending on `get_file_mime_type`.
-        # """
-
     # TODO: Write the response to a GET request
     def get_request(self, requested_file, number,range, data: list[str], username, has_cookie):
         # print(number)
@@ -677,10 +604,6 @@ class HTTPServer:
             return self.resource_forbidden(data, username, has_cookie)
         else:
             builder = ResponseBuilder()
-            # if should_return_binary(requested_file.split(".")[1]):
-            #     builder.set_content(get_file_binary_contents(requested_file))
-            # else:
-            #     builder.set_content(get_file_contents(requested_file))
             if int(number) == 1 and os.path.isdir(requested_file):
                 # Case: Return directory content as JSON
                 content = self.get_directory_content(requested_file)
@@ -695,6 +618,7 @@ class HTTPServer:
                 media_type, encoding = mimetypes.guess_type(requested_file)
                 builder.add_header("Content-Type", media_type)
                 builder.add_header("Content-Length", str(len(file_content)))
+                builder.add_header("Content-Disposition", "attachment")
                 builder.set_status("200", "OK")
             elif int(number) == 0:
                 # Case: Show HTML page for directory or file
@@ -713,7 +637,6 @@ class HTTPServer:
                 builder.set_status("200", "OK")
             elif int(number) == 4:
                 # Case: Breakpoint Transmission
-                # print(range)
                 file_size = os.path.getsize(requested_file)
                 file_content = get_file_binary_contents(requested_file)
                 file_size = len(file_content)
@@ -804,21 +727,6 @@ class HTTPServer:
             self.add_cookie(username, builder, has_cookie)
             return builder.build(), keep
 
-        # """
-        # Responds to a GET request with the associated bytes.
-        #
-        # If the request is to a file that does not exist, returns
-        # a `NOT FOUND` error.
-        #
-        # If the request is to a file that does not have the `other`
-        # read permission, returns a `FORBIDDEN` error.
-        #
-        # Otherwise, we must read the requested file's content, either
-        # in binary or text depending on `should_return_binary` and
-        # send it back with a status set and appropriate mime type
-        # depending on `get_file_mime_type`.
-        # """
-
     def get_directory_content(self, directory):
         content = []
         for item in os.listdir(directory):
@@ -892,9 +800,6 @@ class HTTPServer:
 
     # TODO: Write the response to a POST request
     def post_request(self, number, requested_file, data, username, raw_data, has_cookie):
-        # print(number)
-        # print(requested_file)
-        # print(data)
         keep = self.check_keep(data)
         builder = ResponseBuilder()
         if int(number) == 1:
@@ -908,7 +813,6 @@ class HTTPServer:
                         break
 
             sections = "".join(raw_data).split("--" + boundary)
-            # print(sections)
             fileInfo = sections[1]
             # print(fileInfo)
             match = re.search(r'filename="(.+?)"', fileInfo)
@@ -943,32 +847,6 @@ class HTTPServer:
         self.add_cookie(username, builder, has_cookie)
         return builder.build(), keep
 
-        # """
-        # Responds to a POST request with an HTML page with keys and values
-        # echoed per the requirements writeup.
-        #
-        # A post request through the form will send over key value pairs
-        # through "x-www-form-urlencoded" format. You may learn more about
-        # that here:
-        #   https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/POST
-        # You /do not/ need to check the POST request's Content-Type to
-        # verify the encoding used (although a real server would).
-        #
-        # From the request, each key and value should be extracted. A row in
-        # the HTML table will hold a single key-value pair. With the key having
-        # the first column and the value the second. If a request sent n
-        # key-value pairs, the HTML page returned should contain a table like:
-        #
-        # | key 1 | val 1 |
-        # | key 2 | val 2 |
-        # | ...   | ...   |
-        # | key n | val n |
-        #
-        # Care should be taken in forming values with spaces. Since the request
-        # was urlencoded, it will need to be decoded using
-        # `urllib.parse.unquote`.
-        # """
-
     def need_authorized(self, data):
         keep = self.check_keep(data)
         builder = ResponseBuilder()
@@ -998,12 +876,6 @@ class HTTPServer:
 
     def method_not_allowed(self, data, username, has_cookie):
         keep = self.check_keep(data)
-        """
-        Returns 405 not allowed status and gives allowed methods.
-        
-        TODO: If you are not going to complete the `ResponseBuilder`,
-        This must be rewritten.
-        """
         builder = ResponseBuilder()
         builder.set_status("405", "METHOD NOT ALLOWED")
         allowed = ", ".join(["GET", "POST"])
@@ -1018,12 +890,8 @@ class HTTPServer:
         builder.add_header("Content-Length", 0)
         return builder.build(), keep
 
-    # TODO: Make a function that handles not found error
     def resource_not_found(self, data, username, has_cookie):
         keep = self.check_keep(data)
-        """
-        Returns 404 not found status and sends back our 404.html page.
-        """
         builder = ResponseBuilder()
         builder.set_status("404", "NOT FOUND")
         if keep:
@@ -1040,9 +908,6 @@ class HTTPServer:
     # TODO: Make a function that handles forbidden error
     def resource_forbidden(self, data, username, has_cookie):
         keep = self.check_keep(data)
-        """
-        Returns 403 FORBIDDEN status and sends back our 403.html page.
-        """
         builder = ResponseBuilder()
         builder.set_status("403", "FORBIDDEN")
         if keep:
@@ -1058,9 +923,6 @@ class HTTPServer:
 
     def bad_request(self, data, username, has_cookie):
         keep = self.check_keep(data)
-        """
-        Returns 400 Bad Request status and sends back our 400.html page.
-        """
         builder = ResponseBuilder()
         builder.set_status("400", "Bad Request")
         if keep:
@@ -1075,9 +937,6 @@ class HTTPServer:
 
     def Range_Not_Satisfiable(self, data, username, has_cookie):
         keep = self.check_keep(data)
-        """
-        Returns 416 
-        """
         builder = ResponseBuilder()
         builder.set_status("416", "Range Not Satisfiable")
         if keep:
@@ -1092,25 +951,12 @@ class HTTPServer:
 
 
 class ResponseBuilder:
-    """
-    This class is here for your use if you want to use it. This follows
-    the builder design pattern to assist you in forming a response. An
-    example of its use is in the `method_not_allowed` function.
-
-    Its use is optional, but it is likely to help, and completing and using
-    this function to build your responses will give 5 bonus points.
-    """
-
     def __init__(self):
-        """
-        Initialize the parts of a response to nothing.
-        """
         self.headers = []
         self.status = None
         self.content = None
 
     def add_header(self, headerKey, headerValue):
-        """ Adds a new header to the response """
         self.headers.append(f"{headerKey}: {headerValue}")
 
     def add_cors_headers(self):
@@ -1144,7 +990,10 @@ class ResponseBuilder:
             # Check if chunked transfer encoding is used
             if "Transfer-Encoding: chunked" in self.headers:
                 response = response.encode("utf-8")
-                chunk_size = 2  # You can adjust the chunk size as needed
+                chunk_size= 10
+                if len(self.content) > 1000:
+                    chunk_size = 1000
+
                 chunks = [self.content[i:i + chunk_size] for i in range(0, len(self.content), chunk_size)]
                 for chunk in chunks:
                     chunk_size_hex = hex(len(chunk))[2:]  # Convert to hexadecimal
@@ -1158,23 +1007,8 @@ class ResponseBuilder:
                 response = response.encode("utf-8")
                 response += self.content
         return response
-        # """
-        # Returns the utf-8 bytes of the response.
-        #
-        # Uses the `self.status`, `self.headers` and `self.content` to form
-        # an HTTP response in valid formatting per w3c specifications, which
-        # can be seen here:
-        #   https://www.w3.org/Protocols/rfc2616/rfc2616-sec6.html
-        # or here:
-        #   https://www.tutorialspoint.com/http/http_responses.htm
-        #
-        # Where CRLF is our `NEWLINE` constant.
-        # """
 
 def main():
-    """
-    Parses the command line arguments and starts the server.
-    """
     parser = argparse.ArgumentParser(description="A simple HTTP server.")
     parser.add_argument("-i", "--host", type=str, default="localhost", help="The host to serve on.")
     parser.add_argument("-p", "--port", type=int, default=8080, help="The port to listen on.")
