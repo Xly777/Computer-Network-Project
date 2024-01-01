@@ -214,6 +214,7 @@ class HTTPServer:
                 ifPost = 0
                 ifOverSize = 0
                 response, keep = self.process_response(req)
+            print(response)
             client_sock.sendall(response)
             if not keep:
                 break
@@ -227,7 +228,7 @@ class HTTPServer:
         has_auth = False
         for line in data:
             if line.strip():
-                if line.split()[0] == 'Authorization:':
+                if line.split()[0].lower() == 'authorization:':
                     has_auth = True
         return has_auth
 
@@ -907,19 +908,20 @@ class HTTPServer:
                         break
 
             sections = "".join(raw_data).split("--" + boundary)
+            # print(sections)
             fileInfo = sections[1]
             # print(fileInfo)
             match = re.search(r'filename="(.+?)"', fileInfo)
+
             if match:
                 filename = match.group(1)
                 parts = fileInfo.split(filename)
+                # print(parts)
                 fileContent = parts[1]
                 fileContent = fileContent[5:]
-                # print(parts)
-                # print(filename)
+                fileContent = fileContent.replace("\r\n", "\n")
                 # print(fileContent)
                 filePath = requested_file + "/" + filename
-                # print(filePath)
                 try:
                     with open(filePath, 'x') as file:
                         file.write(fileContent)
@@ -1115,7 +1117,7 @@ class ResponseBuilder:
         """添加CORS头到响应中"""
         self.add_header("Access-Control-Allow-Origin", "*")  # 允许来自任何来源的请求
         self.add_header("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS")  # 允许特定的HTTP方法
-        self.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization")  # 允许特定的头部
+        self.add_header("Access-Control-Allow-Headers", "Content-Type,Authorization,Range,Content-Length")  # 允许特定的头部
 
     def set_status(self, statusCode, statusMessage):
         """ Sets the status of the response """

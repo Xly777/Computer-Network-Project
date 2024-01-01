@@ -4,7 +4,7 @@ Connection: Keep-Alive
 
 
 ###
-GET http://localhost:8080/root/a.txt
+GET http://localhost:8080/root/
 Authorization: Basic cm9vdDpyb290
 Connection: Keep-Alive
 
